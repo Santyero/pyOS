@@ -32,7 +32,7 @@ class os_t:
 		self.the_task = None
 		self.next_task_id = 0
 
-		self.memory_offset = 0	
+		self.memory_offset = 0		
 		self.memory_max = self.memory.get_size() - 1
 
 		self.current_task = None
@@ -110,14 +110,14 @@ class os_t:
 			self.panic("current_task must be None when scheduling a new one (current_task="+self.current_task.bin_name+")")
 		if task.state != PYOS_TASK_STATE_READY:
 			self.panic("task "+task.bin_name+" must be in READY state for being scheduled (state = "+str(task.state)+")")
-
-		for i in range(len(task.regs)):	#registradores de proposito geral salvos na task struct
-			self.cpu.set_reg(i, task.regs[i])
-		self.cpu.set_pc(task.reg_pc) #PC salvo na task struct
-		task.state = PYOS_TASK_STATE_EXECUTING #atualizar estado do processo 
-		self.cpu.set_paddr_offset(task.paddr_offset) #registradores que configuram a memoria virtual, salvos na task struct
-		self.cpu.set_paddr_max(task.paddr_max) #registradores que configuram a memoria virtual, salvos na task struct
-  
+		
+		for i in range(len(task.regs)):
+			self.cpu.set_reg(i, task.regs[i])  # Definir os registradores de proposito geral 
+		self.cpu.set_pc(task.reg_pc) # Definir o PC (Program Counter)	
+		task.state = PYOS_TASK_STATE_EXECUTING # Atualizar o estado do processo
+		self.cpu.set_paddr_offset(task.paddr_offset) # Definir os registradores que configuram a memoria virtual
+		self.cpu.set_paddr_max(task.paddr_max)  # Definir os registradores que configuram a memoria virtual
+		
 		self.current_task = task
 		self.printk("scheduling task "+task.bin_name)
 
@@ -129,17 +129,15 @@ class os_t:
 	# -1, -1 if cannot find
 
 	def allocate_contiguos_physical_memory_to_task (self, words, task):
-		paddr_offset = -1
-		paddr_max = -1
-		# TODO
-		# Localizar um bloco de memoria livre para armazenar o processo
-		# Retornar tupla <primeiro endereco livre>, <ultimo endereco livre>
 
-		# if we get here, there is no free space to put the task
+		paddr_offset = self.memory_offset # Localizar um bloco de memoria livre para armazenar o processo		
+		paddr_max = paddr_offset + words	
 
-		if paddr_offset != -1:
-			return paddr_offset, paddr_max
-
+		if paddr_max < self.memory_max:	
+			self.memory_offset = paddr_offset + 1	
+			return paddr_offset, paddr_max 	# Localizar um bloco de memoria livre para armazenar o processo	
+		
+		# if we get here, there is no free space to put the task	
 		self.printk("could not allocate memory to task "+task.bin_name)
 		return -1, -1
 
@@ -250,9 +248,8 @@ class os_t:
 			self.un_sched(task)
 			self.terminate_unsched_task(task)
 			self.sched(self.idle_task)
-   			self.memory_offset = task.paddr_offset
-
-			for i in range (self.memory_offset, task.paddr_max):
+			self.memory_offset = task.paddr_offset	
+			for i in range (self.memory_offset, task.paddr_max):	
 				self.memory.write(i, 0x0000)
 	
 		# TODO
