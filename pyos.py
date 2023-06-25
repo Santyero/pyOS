@@ -47,14 +47,14 @@ class os_t:
 
 		self.terminal.console_print("this is the console, type the commands here\n")
 
-	def load_task (self, bin_name):
+	def load_task(self, bin_name):
 		if not os.path.isfile(bin_name):
-			self.printk("file "+bin_name+" does not exists")
+			self.printk(f"file {bin_name} does not exists")
 			return None
 		if (os.path.getsize(bin_name) % 2) == 1:
-			self.printk("file size of "+bin_name+" must be even")
+			self.printk(f"file size of {bin_name} must be even")
 			return None
-		
+
 		task = task_t()
 		task.bin_name = bin_name
 		task.bin_size = os.path.getsize(bin_name) / 2 # 2 bytes = 1 word
@@ -68,11 +68,13 @@ class os_t:
 		task.stack = 0
 		task.state = PYOS_TASK_STATE_READY
 
-		self.printk("allocated physical addresses "+str(task.paddr_offset)+" to "+str(task.paddr_max)+" for task "+task.bin_name+" ("+str(self.get_task_amount_of_memory(task))+" words) (binary has "+str(task.bin_size)+" words)")
+		self.printk(
+			f"allocated physical addresses {str(task.paddr_offset)} to {str(task.paddr_max)} for task {task.bin_name} ({str(self.get_task_amount_of_memory(task))} words) (binary has {str(task.bin_size)} words)"
+		)
 
 		self.read_binary_to_memory(task.paddr_offset, task.paddr_max, bin_name)
 
-		self.printk("task "+bin_name+" successfully loaded")
+		self.printk(f"task {bin_name} successfully loaded")
 
 		task.tid = self.next_task_id
 		self.next_task_id = self.next_task_id + 1
@@ -80,7 +82,7 @@ class os_t:
 		#self.tasks.append( task )
 		return task
 
-	def read_binary_to_memory (self, paddr_offset, paddr_max, bin_name):
+	def read_binary_to_memory(self, paddr_offset, paddr_max, bin_name):
 		bpos = 0
 		paddr = paddr_offset
 		bin_size = os.path.getsize(bin_name) / 2
@@ -96,30 +98,38 @@ class os_t:
 				else:
 					word = lower_byte | (byte << 8)
 					if paddr > paddr_max:
-						self.panic("something really bad happenned when loading "+bin_name+" (paddr > task.paddr_max)")
+						self.panic(
+							f"something really bad happenned when loading {bin_name} (paddr > task.paddr_max)"
+						)
 					self.memory.write(paddr, word)
 					paddr = paddr + 1
 					i = i + 1
 				bpos = bpos ^ 1
 
 		if i != bin_size:
-			self.panic("something really bad happenned when loading "+bin_name+" (i != task.bin_size)")
+			self.panic(
+				f"something really bad happenned when loading {bin_name} (i != task.bin_size)"
+			)
 
-	def sched (self, task):
+	def sched(self, task):
 		if self.current_task is not None:
-			self.panic("current_task must be None when scheduling a new one (current_task="+self.current_task.bin_name+")")
+			self.panic(
+				f"current_task must be None when scheduling a new one (current_task={self.current_task.bin_name})"
+			)
 		if task.state != PYOS_TASK_STATE_READY:
-			self.panic("task "+task.bin_name+" must be in READY state for being scheduled (state = "+str(task.state)+")")
-		
+			self.panic(
+				f"task {task.bin_name} must be in READY state for being scheduled (state = {str(task.state)})"
+			)
+
 		for i in range(len(task.regs)):
 			self.cpu.set_reg(i, task.regs[i])  # Definir os registradores de proposito geral 
 		self.cpu.set_pc(task.reg_pc) # Definir o PC (Program Counter)	
 		task.state = PYOS_TASK_STATE_EXECUTING # Atualizar o estado do processo
 		self.cpu.set_paddr_offset(task.paddr_offset) # Definir os registradores que configuram a memoria virtual
 		self.cpu.set_paddr_max(task.paddr_max)  # Definir os registradores que configuram a memoria virtual
-		
+
 		self.current_task = task
-		self.printk("scheduling task "+task.bin_name)
+		self.printk(f"scheduling task {task.bin_name}")
 
 	def get_task_amount_of_memory (self, task):
 		return task.paddr_max - task.paddr_offset + 1
@@ -128,7 +138,7 @@ class os_t:
 	# returns the addresses of the first and last words to be used by the process
 	# -1, -1 if cannot find
 
-	def allocate_contiguos_physical_memory_to_task (self, words, task):
+	def allocate_contiguos_physical_memory_to_task(self, words, task):
 
 		paddr_offset = self.memory_offset # Localizar um bloco de memoria livre para armazenar o processo		
 		paddr_max = paddr_offset + words	
@@ -136,21 +146,21 @@ class os_t:
 		if paddr_max < self.memory_max:	
 			self.memory_offset = paddr_offset + 1	
 			return paddr_offset, paddr_max 	# Localizar um bloco de memoria livre para armazenar o processo	
-		
-		# if we get here, there is no free space to put the task	
-		self.printk("could not allocate memory to task "+task.bin_name)
+
+		# if we get here, there is no free space to put the task
+		self.printk(f"could not allocate memory to task {task.bin_name}")
 		return -1, -1
 
 	def printk(self, msg):
-		self.terminal.kernel_print("kernel: " + msg + "\n")
+		self.terminal.kernel_print(f"kernel: {msg}" + "\n")
 
-	def panic (self, msg):
+	def panic(self, msg):
 		self.terminal.end()
-		self.terminal.dprint("kernel panic: " + msg)
+		self.terminal.dprint(f"kernel panic: {msg}")
 		self.cpu.cpu_alive = False
 		#cpu.cpu_alive = False
 
-	def interrupt_keyboard (self):
+	def interrupt_keyboard(self):
 		key = self.terminal.get_key_buffer()
 
 		if ((key >= ord('a')) and (key <= ord('z'))) or ((key >= ord('A')) and (key <= ord('Z'))) or ((key >= ord('0')) and (key <= ord('9'))) or (key == ord(' ')) or (key == ord('-')) or (key == ord('_')) or (key == ord('.')):
@@ -159,18 +169,20 @@ class os_t:
 		elif key == curses.KEY_BACKSPACE:
 			self.console_str = self.console_str[:-1]
 			self.terminal.console_print("\r" + self.console_str)
-		elif (key == curses.KEY_ENTER) or (key == ord('\n')):
+		elif key in [curses.KEY_ENTER, ord('\n')]:
 			self.interpret_cmd(self.console_str)
 			self.console_str = ""
 
-	def interpret_cmd (self, cmd):
+	def interpret_cmd(self, cmd):
 		if cmd == "bye":
 			self.cpu.cpu_alive = False
 		elif cmd == "tasks":
 			self.task_table_print()
 		elif cmd[:3] == "run":
 			if (self.the_task is not None):
-				self.terminal.console_print("error: binary " + self.the_task.bin_name + " is already running\n")
+				self.terminal.console_print(
+					f"error: binary {self.the_task.bin_name}" + " is already running\n"
+				)
 			else:
 				bin_name = cmd[4:]
 				self.terminal.console_print("\rrun binary " + bin_name + "\n")
@@ -180,56 +192,55 @@ class os_t:
 					self.un_sched(self.idle_task)
 					self.sched(self.the_task)
 				else:
-					self.terminal.console_print("error: binary " + bin_name + " not found\n")
+					self.terminal.console_print(f"error: binary {bin_name}" + " not found\n")
 		else:
 			self.terminal.console_print("\rinvalid cmd " + cmd + "\n")
 
-	def terminate_unsched_task (self, task):
+	def terminate_unsched_task(self, task):
 		if task.state == PYOS_TASK_STATE_EXECUTING:
 			self.panic("impossible to terminate a task that is currently running")
 		if task == self.idle_task:
 			self.panic("impossible to terminate idle task")
 		if task is not self.the_task:
 			self.panic("task being terminated should be the_task")
-		
+
 		self.the_task = None
-		self.printk("task "+task.bin_name+" terminated")
+		self.printk(f"task {task.bin_name} terminated")
 
-	def un_sched (self, task):
+	def un_sched(self, task):
 		if task.state != PYOS_TASK_STATE_EXECUTING:
-			self.panic("task "+task.bin_name+" must be in EXECUTING state for being scheduled (state = "+str(task.state)+")")
+			self.panic(
+				f"task {task.bin_name} must be in EXECUTING state for being scheduled (state = {str(task.state)})"
+			)
 		if task is not self.current_task:
-			self.panic("task "+task.bin_name+" must be the current_task for being scheduled (current_task = "+self.current_task.bin_name+")")
+			self.panic(
+				f"task {task.bin_name} must be the current_task for being scheduled (current_task = {self.current_task.bin_name})"
+			)
 
-		for i in range(0,8):	
+		for i in range(8):	
 			task.regs[i] = self.cpu.get_reg(i)  # Salvar os registradores de proposito geral
 		task.reg_pc = self.cpu.get_pc()  # Salvar o PC (Program Counter)
 		task.state = PYOS_TASK_STATE_READY  # Atualizar o estado do processo
 
 		self.current_task = None
-		self.printk("unscheduling task "+task.bin_name)
+		self.printk(f"unscheduling task {task.bin_name}")
 
 	def virtual_to_physical_addr (self, task, vaddr):
 		return task.paddr_offset + vaddr
 
-	def check_valid_vaddr (self, task, vaddr):
+	def check_valid_vaddr(self, task, vaddr):
 		paddr = self.virtual_to_physical_addr(self.current_task, vaddr)
-		if paddr > task.paddr_max:
-			return False
-		else:
-			return True
+		return paddr <= task.paddr_max
 
-	def handle_gpf (self, error):
+	def handle_gpf(self, error):
 		task = self.current_task
-		self.printk("gpf task "+task.bin_name+": "+error)
-		self.un_sched(task)
-		self.terminate_unsched_task(task)
-		self.sched(self.idle_task)
+		self.printk(f"gpf task {task.bin_name}: {error}")
+		self.close_process(task)
 
 	def interrupt_timer (self):
 		self.printk("timer interrupt NOT IMPLEMENTED")
 
-	def handle_interrupt (self, interrupt):
+	def handle_interrupt(self, interrupt):
 		if interrupt == pycfg.INTERRUPT_MEMORY_PROTECTION_FAULT:
 			self.handle_gpf("invalid memory address")
 		elif interrupt == pycfg.INTERRUPT_KEYBOARD:
@@ -237,23 +248,45 @@ class os_t:
 		elif interrupt == pycfg.INTERRUPT_TIMER:
 			self.interrupt_timer()
 		else:
-			self.panic("invalid interrupt "+str(interrupt))
+			self.panic(f"invalid interrupt {str(interrupt)}")
 
-	def syscall (self):
+	def syscall(self):  # sourcery skip: avoid-builtin-shadow
 		service = self.cpu.get_reg(0)
 		task = self.current_task
 
 		if service == 0:
-			self.printk("app "+self.current_task.bin_name+" request finish")
-			self.un_sched(task)
-			self.terminate_unsched_task(task)
-			self.sched(self.idle_task)
-			self.memory_offset = task.paddr_offset	
-			for i in range (self.memory_offset, task.paddr_max):	
-				self.memory.write(i, 0x0000)
-	
-		# TODO
-		# Implementar aqui as outras chamadas de sistema
-		
+			self.close_process(task)
+		if service == 1:
+			vaddr = self.cpu.get_reg(1)
+			if not self.check_valid_vaddr(task, vaddr):
+				self.handle_gpf(f"invalid vaddr {str(vaddr)}")
+				return
+			str = self.memory.read_str(vaddr)
+			self.terminal.console_print(str)
+			return
+		if service == 2:
+				self.terminal.console_print("\n")
+				return
+		if service == 3:
+			vaddr = self.cpu.get_reg(1)
+			if not self.check_valid_vaddr(task, vaddr):
+				self.handle_gpf(f"invalid vaddr {str(vaddr)}")
+				return
+			integer = self.memory.read_int(vaddr)
+			self.terminal.console_print(str(integer))
+			return
+
 		else:
-			self.handle_gpf("invalid syscall "+str(service))
+			self.handle_gpf(f"invalid syscall {str(service)}")
+
+	def close_and_clean(self, task):
+		self.printk(f"app {self.current_task.bin_name} request finish")
+		self.close_process(task)
+		self.memory_offset = task.paddr_offset
+		for i in range (self.memory_offset, task.paddr_max):	
+			self.memory.write(i, 0x0000)
+
+	def close_process(self, task):
+		self.un_sched(task)
+		self.terminate_unsched_task(task)
+		self.sched(self.idle_task)
