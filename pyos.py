@@ -32,7 +32,7 @@ class os_t:
 		self.the_task = None
 		self.next_task_id = 0
 
-		self.memory_offset = 0		
+		self.memory_offset = 0  
 		self.memory_max = self.memory.get_size() - 1
 
 		self.current_task = None
@@ -142,7 +142,7 @@ class os_t:
 		paddr_max = paddr_offset + words	
 
 		if paddr_max < self.memory_max:	
-			self.memory_offset = paddr_offset + 1	
+			self.memory_offset = paddr_max + 1	
 			return paddr_offset, paddr_max 	# Localizar um bloco de memoria livre para armazenar o processo	
 
 		# if we get here, there is no free space to put the task
@@ -176,16 +176,14 @@ class os_t:
 			self.cpu.cpu_alive = False
 			return
 		if cmd == "tasks":
-			self.task_table_print() #Nao estava implementado 
-			return
+			return self.task_table_print() #Nao estava implementado 
 		if cmd[:3] == "run":
 			return self.run_task(cmd)
 		self.terminal.console_print("\rinvalid cmd " + cmd + "\n")
 
 	def run_task(self, cmd):
 		if (self.the_task is not None):
-			self.terminal.console_print("error: binary " + self.the_task.bin_name + " is already running\n")
-			return
+			return self.terminal.console_print("error: binary " + self.the_task.bin_name + " is already running\n")
 		bin_name = cmd[4:]
 		self.terminal.console_print("\rrun binary " + bin_name + "\n")
 		task = self.load_task(bin_name)
@@ -195,7 +193,6 @@ class os_t:
 			self.sched(self.the_task)
 		else:
 			self.terminal.console_print("error: binary " + bin_name + " not found\n")
-		return
 
 	def terminate_unsched_task(self, task):
 		if task.state == PYOS_TASK_STATE_EXECUTING:
@@ -210,7 +207,7 @@ class os_t:
 
 	def un_sched(self, task):
 		if task.state != PYOS_TASK_STATE_EXECUTING:
-				self.panic("task "+task.bin_name+" must be in EXECUTING state for being scheduled (state = "+str(task.state)+")")
+			self.panic("task "+task.bin_name+" must be in EXECUTING state for being scheduled (state = "+str(task.state)+")")
 		if task is not self.current_task:
 			self.panic("task "+task.bin_name+" must be the current_task for being scheduled (current_task = "+self.current_task.bin_name+")")
 
@@ -247,47 +244,30 @@ class os_t:
 		else:
 			self.panic("invalid interrupt "+str(interrupt))
 
-	def syscall(self):  # sourcery skip: avoid-builtin-shadow
+	def syscall(self):
 		service = self.cpu.get_reg(0)
 		task = self.current_task
 
 		if service == 0:
+			self.printk("app "+self.current_task.bin_name+" request finish")
 			self.close_process(task)
-		if service == 1:
-			vaddr = self.cpu.get_reg(1)
-			if not self.check_valid_vaddr(task, vaddr): # Verificar se o endereco virtual e valido
-				self.handle_gpf("invalid vaddr "+{str(vaddr)}) 
-				return
-			string_value  = self.memory.read_str(vaddr) # Ler a string da memoria
-			self.terminal.console_print(string_value) # Imprimir a string
+			self.memory_offset = task.paddr_offset
+			for i in range (self.memory_offset, task.paddr_max):
+				self.memory.write(i, 0x0000)
 			return
+		if service == 1:
+			return self.print_string(task, self.cpu.get_reg(1))
 		if service == 2:
-				self.terminal.console_print("\n") # Imprimir uma nova linha
-				return
-		# if service == 3:
-		# 	vaddr = self.cpu.get_reg(1)
-		# 	if not self.check_valid_vaddr(task, vaddr): # Verificar se o endereco virtual e valido
-		# 		self.handle_gpf("invalid vaddr "+ {str(vaddr)}) 
-		# 		return
-		# 	integer = self.read_int(vaddr) # Ler o inteiro da memoria
-		# 	self.terminal.console_print(str(integer)) # Imprimir o inteiro
-		# 	return
-
-		else:
-			self.handle_gpf("invalid syscall " + str(service)) # Tratar syscall invalida
-
-	def close_and_clean(self, task): 
-		self.printk("app "+ {self.current_task.bin_name} +" request finish") # Imprimir mensagem de finalizacao
-		self.close_process(task) # Fechar o processo
-		self.memory_offset = task.paddr_offset # Atualizar o offset da memoria
-		for i in range (self.memory_offset, task.paddr_max):	 # Limpar a memoria
-			self.memory.write(i, 0x0000) # Escrever 0 em todas as posicoes da memoria
+			return self.terminal.app_print("\n") # Imprimir uma nova linha
+		if service == 3:
+			return self.terminal.app_print(str(self.cpu.get_reg(1))) # Imprimir numero do servico
+	
+		self.handle_gpf("invalid syscall " + str(service)) # Tratar syscall invalida
 
 	def close_process(self, task):
 		self.un_sched(task) # Desagendar a tarefa
 		self.terminate_unsched_task(task) # Terminar a tarefa
 		self.sched(self.idle_task) # Reiniciar as proximas tarefas
-  
   
 	def task_table_print(self):
 		self.terminal.console_print("task table:\n")
@@ -310,3 +290,21 @@ class os_t:
 				str(self.idle_task.tid) + "   READY   " + str(self.idle_task.reg_pc) + "   " + str(
 					self.idle_task.stack) + "   " + str(self.idle_task.paddr_offset) + "   " + str(
 					self.idle_task.paddr_max) + "   " + self.idle_task.bin_name + "\n")
+	
+	def load_memory(self, task, virtual_address):
+		if (self.check_valid_vaddr(task, virtual_address)):
+			physical_address = self.virtual_to_physical_addr(task, virtual_address)
+			return self.memory.read(physical_address)
+		
+		return self.handle_gpf("Invalid Memory Access")
+
+	def print_string(self, task, virtual_address):
+		string_buffer = []
+		value = self.load_memory(task, virtual_address)	
+		while value:
+			character = chr(value)
+			string_buffer.append(character)
+			virtual_address += 1
+			value = self.load_memory(task, virtual_address)
+		string_to_print = ''.join(string_buffer)
+		self.terminal.app_print(string_to_print)
