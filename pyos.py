@@ -180,14 +180,6 @@ class os_t:
 			return
 		if cmd[:3] == "run":
 			return self.run_task(cmd)
-		# if cmd[:7] == "execute":
-		# 	if self.the_task is None:
-		# 		self.terminal.console_print("error: no binary is currently running\n")
-		# 		return
-		# 	exec_cmd = cmd[8:]
-		# 	self.terminal.console_print("\rexecute command: " + exec_cmd + "\n")
-		# 	self.execute_command(self.the_task, exec_cmd)
-		# 	return
 		self.terminal.console_print("\rinvalid cmd " + cmd + "\n")
 
 	def run_task(self, cmd):
@@ -266,8 +258,8 @@ class os_t:
 			if not self.check_valid_vaddr(task, vaddr): # Verificar se o endereco virtual e valido
 				self.handle_gpf("invalid vaddr "+{str(vaddr)}) 
 				return
-			str = self.memory.read_str(vaddr) # Ler a string da memoria
-			self.terminal.console_print(str) # Imprimir a string
+			string_value  = self.memory.read_str(vaddr) # Ler a string da memoria
+			self.terminal.console_print(string_value) # Imprimir a string
 			return
 		if service == 2:
 				self.terminal.console_print("\n") # Imprimir uma nova linha
@@ -282,7 +274,7 @@ class os_t:
 		# 	return
 
 		else:
-			self.handle_gpf("invalid syscall " +{str(service)}) # Tratar syscall invalida
+			self.handle_gpf("invalid syscall " + str(service)) # Tratar syscall invalida
 
 	def close_and_clean(self, task): 
 		self.printk("app "+ {self.current_task.bin_name} +" request finish") # Imprimir mensagem de finalizacao
@@ -299,7 +291,7 @@ class os_t:
   
 	def task_table_print(self):
 		self.terminal.console_print("task table:\n")
-		self.terminal.console_print("id  state pc      sp      baddr   mem      binary\n")
+		self.terminal.console_print("id   state   sp   baddr   mem   binary\n")
 
 		if self.current_task is not None:
 			self.terminal.console_print(
@@ -318,20 +310,3 @@ class os_t:
 				str(self.idle_task.tid) + "   READY   " + str(self.idle_task.reg_pc) + "   " + str(
 					self.idle_task.stack) + "   " + str(self.idle_task.paddr_offset) + "   " + str(
 					self.idle_task.paddr_max) + "   " + self.idle_task.bin_name + "\n")
-
-# def execute_command(self, task, exec_cmd):
-# 		if not self.check_valid_vaddr(task, task.stack):
-# 				self.handle_gpf("invalid stack address for task " + task.bin_name)
-# 				return
-
-# 		self.memory.write_str(task.stack, exec_cmd)  # Escrever o comando na pilha
-# 		self.cpu.set_reg(1, task.stack)  # Configurar o registro 1 com o endereco do comando
-# 		self.cpu.set_reg(0, 4)  # Configurar o registro 0 com o numero de servico 4 (executar comando)
-# 		self.syscall()  # Chamar a syscall para executar o comando
-    
-# def read_int(self, vaddr):
-# 		if not self.check_valid_vaddr(self.current_task, vaddr): # Verificar se o endereco virtual e valido
-# 				self.handle_gpf("invalid vaddr " + str(vaddr))
-# 				return 0
-# 		paddr = self.virtual_to_physical_addr(self.current_task, vaddr)
-# 		return self.memory.read(paddr)
