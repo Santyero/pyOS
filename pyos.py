@@ -179,8 +179,16 @@ class os_t:
 			return self.task_table_print() #Nao estava implementado 
 		if cmd[:3] == "run":
 			return self.run_task(cmd)
+		if cmd[:4] == "kill":
+			return self.kill_task(cmd)
 		self.terminal.console_print("\rinvalid cmd " + cmd + "\n")
 
+	def kill_task(self, cmd):
+		# TODO: Terminar kill task
+		bin_name = cmd[5:]
+		task = self.load_task(bin_name)
+		self.close_process(task)
+  
 	def run_task(self, cmd):
 		if (self.the_task is not None):
 			return self.terminal.console_print("error: binary " + self.the_task.bin_name + " is already running\n")
