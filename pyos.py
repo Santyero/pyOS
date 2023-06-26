@@ -4,8 +4,8 @@ import pycfg
 from pyarch import load_binary_into_memory
 from pyarch import cpu_t
 
-PYOS_TASK_STATE_READY                       = 0
-PYOS_TASK_STATE_EXECUTING                   = 1
+PYOS_TASK_STATE_READY = 0
+PYOS_TASK_STATE_EXECUTING = 1
 
 class task_t:
 	def __init__ (self):
@@ -174,23 +174,36 @@ class os_t:
 	def interpret_cmd(self, cmd):
 		if cmd == "bye":
 			self.cpu.cpu_alive = False
-		elif cmd == "tasks":
-			self.task_table_print()
-		elif cmd[:3] == "run":
-			if (self.the_task is not None):
-				self.terminal.console_print("error: binary " + self.the_task.bin_name + " is already running\n")
-			else:
-				bin_name = cmd[4:]
-				self.terminal.console_print("\rrun binary " + bin_name + "\n")
-				task = self.load_task(bin_name)
-				if task is not None:
-					self.the_task = task
-					self.un_sched(self.idle_task)
-					self.sched(self.the_task)
-				else:
-					self.terminal.console_print("error: binary " + bin_name + " not found\n")
+			return
+		if cmd == "tasks":
+			self.task_table_print() #Nao estava implementado 
+			return
+		if cmd[:3] == "run":
+			return self.run_task(cmd)
+		# if cmd[:7] == "execute":
+		# 	if self.the_task is None:
+		# 		self.terminal.console_print("error: no binary is currently running\n")
+		# 		return
+		# 	exec_cmd = cmd[8:]
+		# 	self.terminal.console_print("\rexecute command: " + exec_cmd + "\n")
+		# 	self.execute_command(self.the_task, exec_cmd)
+		# 	return
+		self.terminal.console_print("\rinvalid cmd " + cmd + "\n")
+
+	def run_task(self, cmd):
+		if (self.the_task is not None):
+			self.terminal.console_print("error: binary " + self.the_task.bin_name + " is already running\n")
+			return
+		bin_name = cmd[4:]
+		self.terminal.console_print("\rrun binary " + bin_name + "\n")
+		task = self.load_task(bin_name)
+		if task is not None:
+			self.the_task = task
+			self.un_sched(self.idle_task)
+			self.sched(self.the_task)
 		else:
-			self.terminal.console_print("\rinvalid cmd " + cmd + "\n")
+			self.terminal.console_print("error: binary " + bin_name + " not found\n")
+		return
 
 	def terminate_unsched_task(self, task):
 		if task.state == PYOS_TASK_STATE_EXECUTING:
@@ -259,14 +272,14 @@ class os_t:
 		if service == 2:
 				self.terminal.console_print("\n") # Imprimir uma nova linha
 				return
-		if service == 3:
-			vaddr = self.cpu.get_reg(1)
-			if not self.check_valid_vaddr(task, vaddr): # Verificar se o endereco virtual e valido
-				self.handle_gpf("invalid vaddr "+ {str(vaddr)}) 
-				return
-			integer = self.memory.read_int(vaddr) # Ler o inteiro da memoria
-			self.terminal.console_print(str(integer)) # Imprimir o inteiro
-			return
+		# if service == 3:
+		# 	vaddr = self.cpu.get_reg(1)
+		# 	if not self.check_valid_vaddr(task, vaddr): # Verificar se o endereco virtual e valido
+		# 		self.handle_gpf("invalid vaddr "+ {str(vaddr)}) 
+		# 		return
+		# 	integer = self.read_int(vaddr) # Ler o inteiro da memoria
+		# 	self.terminal.console_print(str(integer)) # Imprimir o inteiro
+		# 	return
 
 		else:
 			self.handle_gpf("invalid syscall " +{str(service)}) # Tratar syscall invalida
@@ -282,3 +295,43 @@ class os_t:
 		self.un_sched(task) # Desagendar a tarefa
 		self.terminate_unsched_task(task) # Terminar a tarefa
 		self.sched(self.idle_task) # Reiniciar as proximas tarefas
+  
+  
+	def task_table_print(self):
+		self.terminal.console_print("task table:\n")
+		self.terminal.console_print("id  state pc      sp      baddr   mem      binary\n")
+
+		if self.current_task is not None:
+			self.terminal.console_print(
+				str(self.current_task.tid) + "   EXEC    " + str(self.current_task.reg_pc) + "   " + str(
+					self.current_task.stack) + "   " + str(self.current_task.paddr_offset) + "   " + str(
+					self.current_task.paddr_max) + "   " + self.current_task.bin_name + "\n")
+
+		if self.the_task is not None:
+			self.terminal.console_print(
+				str(self.the_task.tid) + "   READY   " + str(self.the_task.reg_pc) + "   " + str(
+					self.the_task.stack) + "   " + str(self.the_task.paddr_offset) + "   " + str(
+					self.the_task.paddr_max) + "   " + self.the_task.bin_name + " *\n")
+
+		if self.idle_task is not None:
+			self.terminal.console_print(
+				str(self.idle_task.tid) + "   READY   " + str(self.idle_task.reg_pc) + "   " + str(
+					self.idle_task.stack) + "   " + str(self.idle_task.paddr_offset) + "   " + str(
+					self.idle_task.paddr_max) + "   " + self.idle_task.bin_name + "\n")
+
+# def execute_command(self, task, exec_cmd):
+# 		if not self.check_valid_vaddr(task, task.stack):
+# 				self.handle_gpf("invalid stack address for task " + task.bin_name)
+# 				return
+
+# 		self.memory.write_str(task.stack, exec_cmd)  # Escrever o comando na pilha
+# 		self.cpu.set_reg(1, task.stack)  # Configurar o registro 1 com o endereco do comando
+# 		self.cpu.set_reg(0, 4)  # Configurar o registro 0 com o numero de servico 4 (executar comando)
+# 		self.syscall()  # Chamar a syscall para executar o comando
+    
+# def read_int(self, vaddr):
+# 		if not self.check_valid_vaddr(self.current_task, vaddr): # Verificar se o endereco virtual e valido
+# 				self.handle_gpf("invalid vaddr " + str(vaddr))
+# 				return 0
+# 		paddr = self.virtual_to_physical_addr(self.current_task, vaddr)
+# 		return self.memory.read(paddr)
