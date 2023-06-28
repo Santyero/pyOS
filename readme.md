@@ -33,3 +33,19 @@ O início do código gerado ficará da seguinte forma:
 - Endereço 1: conterá uma instrução jump para o símbolo **_start**
 
 Dessa forma, um simulador para tal arquitetura deverá setar como endereço inicial do registrador **pc** o endereço **1**.
+
+
+# RUNING
+
+Para rodar o projeto antes temos que
+- compilar os arquivos asm em .bin (já estão compilados)
+- executar o make na raiz (já estão compilados)
+
+após termos o projeto completo, basta executar
+ python2 pysim.py
+
+Comandos 
+bye -> sair do sitema
+tasks -> apresenta as tasks rodando
+run *.bin -> roda a função requisitada
+kill * -> mata o processo executado
