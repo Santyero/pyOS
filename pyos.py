@@ -184,10 +184,17 @@ class os_t:
 		self.terminal.console_print("\rinvalid cmd " + cmd + "\n")
 
 	def kill_task(self, cmd):
-		# TODO: Terminar kill task
 		bin_name = cmd[5:]
-		task = self.load_task(bin_name)
-		self.close_process(task)
+		self.terminal.console_print("\rkill binary " + bin_name + "\n")
+		task = self.find_task(bin_name)
+		if task is not None:
+			return self.close_process(task)
+		self.terminal.console_print("error: binary " + bin_name + " not found\n")
+   
+	def find_task(self, bin_name):
+		return next(
+			(task for task in [self.current_task, self.the_task, self.idle_task] if task.bin_name == bin_name), None
+		)
   
 	def run_task(self, cmd):
 		if (self.the_task is not None):
@@ -281,23 +288,23 @@ class os_t:
 		self.terminal.console_print("task table:\n")
 		self.terminal.console_print("id   state   sp   baddr   mem   binary\n")
 
-		if self.current_task is not None:
-			self.terminal.console_print(
-				str(self.current_task.tid) + "   EXEC    " + str(self.current_task.reg_pc) + "   " + str(
-					self.current_task.stack) + "   " + str(self.current_task.paddr_offset) + "   " + str(
-					self.current_task.paddr_max) + "   " + self.current_task.bin_name + "\n")
+		tasks = [
+				task for task in [self.current_task, self.the_task, self.idle_task] if task is not None
+		]
 
-		if self.the_task is not None:
-			self.terminal.console_print(
-				str(self.the_task.tid) + "   READY   " + str(self.the_task.reg_pc) + "   " + str(
-					self.the_task.stack) + "   " + str(self.the_task.paddr_offset) + "   " + str(
-					self.the_task.paddr_max) + "   " + self.the_task.bin_name + " *\n")
-
-		if self.idle_task is not None:
-			self.terminal.console_print(
-				str(self.idle_task.tid) + "   READY   " + str(self.idle_task.reg_pc) + "   " + str(
-					self.idle_task.stack) + "   " + str(self.idle_task.paddr_offset) + "   " + str(
-					self.idle_task.paddr_max) + "   " + self.idle_task.bin_name + "\n")
+		for task in tasks:
+				marker = " *" if task == self.the_task else ""
+				task_info = "{tid}   {state}   {pc}   {stack}   {offset}   {max}   {bin_name}{marker}\n".format(
+						tid=task.tid,
+						state="EXEC" if task == self.current_task else "READY",
+						pc=task.reg_pc,
+						stack=task.stack,
+						offset=task.paddr_offset,
+						max=task.paddr_max,
+						bin_name=task.bin_name,
+						marker=marker
+				)
+				self.terminal.console_print(task_info)
 	
 	def load_memory(self, task, virtual_address):
 		if (self.check_valid_vaddr(task, virtual_address)):

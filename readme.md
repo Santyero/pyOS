@@ -44,8 +44,16 @@ Para rodar o projeto antes temos que
 após termos o projeto completo, basta executar
  python2 pysim.py
 
-Comandos 
-bye -> sair do sitema
-tasks -> apresenta as tasks rodando
-run *.bin -> roda a função requisitada
-kill * -> mata o processo executado
+Comandos:
+
+**bye** -> sair do sitema
+
+**tasks** -> apresenta as tasks rodando
+
+**run** -> roda a função requisitada em um novo processo
+
+```run print.bin```
+
+**kill**-> mata o processo informado
+
+```kill print.bin```
