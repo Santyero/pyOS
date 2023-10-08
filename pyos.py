@@ -29,7 +29,8 @@ class os_t:
 
 		self.console_str = ""
 
-		self.the_task = None
+		self.task_list = [] # Lista de tarefas para execucao
+		self.blocked_tasks = [] # Tarefas em aguardo 
 		self.next_task_id = 0
 
 		self.memory_offset = 0  
@@ -46,7 +47,7 @@ class os_t:
 		self.sched(self.idle_task)
 
 		self.terminal.console_print("this is the console, type the commands here\n")
-
+ 
 	def load_task(self, bin_name):
 		if not os.path.isfile(bin_name):
 			self.printk("file " + bin_name + " does not exist")
@@ -177,8 +178,8 @@ class os_t:
 			return
 		if cmd == "tasks":
 			return self.task_table_print() #Nao estava implementado 
-		if cmd[:3] == "run":
-			return self.run_task(cmd)
+		if cmd[:3] == "add":
+			return self.add_task(cmd)
 		if cmd[:4] == "kill":
 			return self.kill_task(cmd)
 		self.terminal.console_print("\rinvalid cmd " + cmd + "\n")
@@ -193,19 +194,36 @@ class os_t:
    
 	def find_task(self, bin_name):
 		return next(
-			(task for task in [self.current_task, self.the_task, self.idle_task] if task.bin_name == bin_name), None
+			(task for task in [self.current_task, self.current_task, self.idle_task] if task.bin_name == bin_name), None
 		)
-  
+
+	def add_task(self, cmd):
+		bin_name = cmd[4:]
+		print(bin_name)
+		self.terminal.console_print("\radd binary " + bin_name + "\n")
+		task = self.load_task(bin_name)
+		print(task)
+		if task is not None:
+			if self.task_list is not None:
+				self.task_list.append(task)
+				print(self.task_list)
+			else:
+				self.task_list = [task]
+				print(self.task_list)
+				self.run_task("run " + bin_name)
+		else:
+			self.terminal.console_print("error: binary " + bin_name + " not found\n")
+ 
 	def run_task(self, cmd):
-		if (self.the_task is not None):
-			return self.terminal.console_print("error: binary " + self.the_task.bin_name + " is already running\n")
+		if (self.current_task is not None):
+			return self.terminal.console_print("error: binary " + self.current_task.bin_name + " is already running\n")
 		bin_name = cmd[4:]
 		self.terminal.console_print("\rrun binary " + bin_name + "\n")
 		task = self.load_task(bin_name)
 		if task is not None:
-			self.the_task = task
+			self.current_task = task
 			self.un_sched(self.idle_task)
-			self.sched(self.the_task)
+			self.sched(self.current_task)
 		else:
 			self.terminal.console_print("error: binary " + bin_name + " not found\n")
 
@@ -214,13 +232,16 @@ class os_t:
 			self.panic("impossible to terminate a task that is currently running")
 		if task == self.idle_task:
 			self.panic("impossible to terminate idle task")
-		if task is not self.the_task:
-			self.panic("task being terminated should be the_task")
+		if task is not self.current_task:
+			self.panic("task being terminated should be current_task")
 
-		self.the_task = None
+		self.current_task = None
 		self.printk("task "+task.bin_name+" terminated")
 
 	def un_sched(self, task):
+		if not task in self.task_list:
+			self.printk("task "+task.bin_name+" is not in task_list")
+			return 
 		if task.state != PYOS_TASK_STATE_EXECUTING:
 			self.panic("task "+task.bin_name+" must be in EXECUTING state for being scheduled (state = "+str(task.state)+")")
 		if task is not self.current_task:
@@ -247,7 +268,13 @@ class os_t:
 		self.close_process(task)
 
 	def interrupt_timer (self):
-		self.printk("timer interrupt NOT IMPLEMENTED")
+		if self.current_task is None:
+			self.panic("timer interrupt with no current task")
+		self.un_sched(self.current_task)
+		if len(self.task_list) > 0:	
+			self.sched(self.task_list[self.next_sched_task])
+			self.next_sched_task = (self.next_sched_task + 1) % len(self.task_list)
+		self.printk("no has tasks to run")
 
 	def handle_interrupt(self, interrupt):
 		if interrupt == pycfg.INTERRUPT_MEMORY_PROTECTION_FAULT:
@@ -289,11 +316,11 @@ class os_t:
 		self.terminal.console_print("id   state   sp   baddr   mem   binary\n")
 
 		tasks = [
-				task for task in [self.current_task, self.the_task, self.idle_task] if task is not None
+				task for task in [self.current_task, self.current_task, self.idle_task] if task is not None
 		]
 
 		for task in tasks:
-				marker = " *" if task == self.the_task else ""
+				marker = " *" if task == self.current_task else ""
 				task_info = "{tid}   {state}   {pc}   {stack}   {offset}   {max}   {bin_name}{marker}\n".format(
 						tid=task.tid,
 						state="EXEC" if task == self.current_task else "READY",
