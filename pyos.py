@@ -179,9 +179,11 @@ class os_t:
 		if cmd == "tasks":
 			return self.task_table_print() #Nao estava implementado 
 		if cmd[:3] == "add":
-			return self.add_task(cmd)
+			self.add_task(cmd)
+			return
 		if cmd[:4] == "kill":
-			return self.kill_task(cmd)
+			self.kill_task(cmd)
+			return
 		self.terminal.console_print("\rinvalid cmd " + cmd + "\n")
 
 	def kill_task(self, cmd):
@@ -198,18 +200,19 @@ class os_t:
 		)
 
 	def add_task(self, cmd):
+		self.current_task = None
 		bin_name = cmd[4:]
-		print(bin_name)
+		self.printk(bin_name)
 		self.terminal.console_print("\radd binary " + bin_name + "\n")
 		task = self.load_task(bin_name)
-		print(task)
+		self.printk(str(task))
 		if task is not None:
 			if self.task_list is not None:
 				self.task_list.append(task)
-				print(self.task_list)
+				self.printk(str(self.task_list))
 			else:
 				self.task_list = [task]
-				print(self.task_list)
+				self.printk(str(self.task_list))
 				self.run_task("run " + bin_name)
 		else:
 			self.terminal.console_print("error: binary " + bin_name + " not found\n")
@@ -269,7 +272,9 @@ class os_t:
 
 	def interrupt_timer (self):
 		if self.current_task is None:
-			self.panic("timer interrupt with no current task")
+			self.printk("timer interrupt with no current task")
+			return
+			# self.panic("timer interrupt with no current task")
 		self.un_sched(self.current_task)
 		if len(self.task_list) > 0:	
 			self.sched(self.task_list[self.next_sched_task])
