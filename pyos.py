@@ -34,6 +34,12 @@ class os_t:
 
 		self.memory_offset = 0  
 		self.memory_max = self.memory.get_size() - 1
+  
+		# atributos novos memoria
+		self.tamanho_blocos_memoria = 128
+		self.qtde_blocos = self.memory.get_size() / self.tamanho_blocos_memoria
+		self.blocos_memoria = [0] * self.qtde_blocos
+		# ---
 
 		self.current_task = None
 		self.next_sched_task = 0
@@ -58,7 +64,6 @@ class os_t:
 		task = task_t()
 		task.bin_name = bin_name
 		task.bin_size = os.path.getsize(bin_name) / 2 # 2 bytes = 1 word
-
 		task.paddr_offset, task.paddr_max = self.allocate_contiguos_physical_memory_to_task(task.bin_size, task)
 		if task.paddr_offset == -1:
 			return None
@@ -83,7 +88,6 @@ class os_t:
 		task.tid = self.next_task_id
 		self.next_task_id = self.next_task_id + 1
 
-		#self.tasks.append( task )
 		return task
 
 	def read_binary_to_memory(self, paddr_offset, paddr_max, bin_name):
@@ -137,17 +141,26 @@ class os_t:
 	# -1, -1 if cannot find
 
 	def allocate_contiguos_physical_memory_to_task(self, words, task):
+		if words > self.tamanho_blocos_memoria:
+			self.printk("task "+task.bin_name+" cannot allocate more than "+str(self.tamanho_blocos_memoria))
+			return -1, -1
 
-		paddr_offset = self.memory_offset # Localizar um bloco de memoria livre para armazenar o processo		
-		paddr_max = paddr_offset + words	
+		index_bloco_livre = self.blocos_memoria.index(0)
+		if index_bloco_livre == -1:
+			self.printk("without free space for task "+task.bin_name)
+			return -1, -1
 
-		if paddr_max < self.memory_max:	
-			self.memory_offset = paddr_max + 1	
-			return paddr_offset, paddr_max 	# Localizar um bloco de memoria livre para armazenar o processo	
+		paddr_max = index_bloco_livre * self.tamanho_blocos_memoria - 1
+		paddr_offset = index_bloco_livre * self.tamanho_blocos_memoria - self.tamanho_blocos_memoria
+   
+		if paddr_max > self.memory_max:	
+			return -1, -1
+
+		self.blocos_memoria[index_bloco_livre] = 1
+		return paddr_offset, paddr_max 	# Localizar um bloco de memoria livre para armazenar o processo	
 
 		# if we get here, there is no free space to put the task
-		self.printk("could not allocate memory to task "+task.bin_name)
-		return -1, -1
+		
 
 	def printk(self, msg):
 		self.terminal.kernel_print("kernel: " + msg + "\n")
@@ -195,7 +208,7 @@ class os_t:
    
 	def find_task(self, bin_name):
 		return next(
-			(task for task in [self.current_task, self.current_task, self.idle_task] if task.bin_name == bin_name), None
+			(task for task in self.task_list if task.bin_name == bin_name), None
 		)
 
 	def add_task(self, cmd):
@@ -206,38 +219,13 @@ class os_t:
 		if task is None:
 			self.terminal.console_print("error: binary " + bin_name + " not found\n")
 			return
-		self.current_task = None
+		self.un_sched(self.current_task)
 		self.task_list.append(task)
 		self.printk("task "+task.bin_name+" added")
-		self.printk(str(self.task_list))
 		self.sched(task)
- 
-	# def run_task(self, cmd):
-	# 	if (self.current_task is not None):
-	# 		return self.terminal.console_print("error: binary " + self.current_task.bin_name + " is already running\n")
-	# 	bin_name = cmd[4:]
-	# 	self.terminal.console_print("\rrun binary " + bin_name + "\n")
-	# 	task = self.load_task(bin_name)
-	# 	if task is not None:
-	# 		self.current_task = task
-	# 		self.un_sched(self.idle_task)
-	# 		self.sched(self.current_task)
-	# 	else:
-	# 		self.terminal.console_print("error: binary " + bin_name + " not found\n")
-
-	# def terminate_unsched_task(self, task):
-	# 	if task.state == PYOS_TASK_STATE_EXECUTING:
-	# 		self.panic("impossible to terminate a task that is currently running")
-	# 	if task == self.idle_task:
-	# 		self.panic("impossible to terminate idle task")
-	# 	if task != self.current_task:
-	# 		self.panic("task being terminated should be current_task. current_task: " + self.current_task.bin_name)
-
-	# 	self.current_task = None
-	# 	self.printk("task "+task.bin_name+" terminated")
 
 	def un_sched(self, task):
-		if not task in self.task_list:
+		if not task in self.task_list and task is not self.idle_task:
 			self.printk("task "+task.bin_name+" is not in task_list")
 			return 
 		if task.state != PYOS_TASK_STATE_EXECUTING:
@@ -269,7 +257,6 @@ class os_t:
 		if self.current_task is None:
 			self.panic("timer interrupt with no current task")
 			return
-
 		self.escalonador()
 		
   
@@ -278,14 +265,10 @@ class os_t:
 		self.un_sched(self.current_task)
 		if len(self.task_list) > 0:	
 			self.printk('scheduling next task')
-			self.current_task = None
 			task = self.task_list[self.next_sched_task]
-			task.state = PYOS_TASK_STATE_READY
 			self.sched(task)
 			self.next_sched_task = (self.next_sched_task + 1) % len(self.task_list)
 			return
-		self.current_task = None
-		self.idle_task.state = PYOS_TASK_STATE_READY
 		self.sched(self.idle_task)
 
 	def handle_interrupt(self, interrupt):
@@ -305,9 +288,7 @@ class os_t:
 		if service == 0:
 			self.printk("app "+self.current_task.bin_name+" request finish")
 			self.close_process(task)
-			self.memory_offset = task.paddr_offset
-			for i in range (self.memory_offset, task.paddr_max):
-				self.memory.write(i, 0x0000)
+			
 			return
 		if service == 1:
 			return self.print_string(task, self.cpu.get_reg(1))
@@ -319,12 +300,20 @@ class os_t:
 		self.handle_gpf("invalid syscall " + str(service)) # Tratar syscall invalida
 
 	def close_process(self, task):
+		if task == self.idle_task:
+			self.panic("impossible to terminate idle task")
+		if task != self.current_task:
+			self.panic("task being terminated should be current_task. current_task: " + self.current_task.bin_name)
+     
 		self.printk("closing process "+task.bin_name)
-		self.un_sched(task) # Desagendar a tarefa
-		# self.terminate_unsched_task(task) # Terminar a tarefa
+		self.un_sched(task)
 		self.task_list.remove(task)
-		self.current_task = None
-		self.idle_task.state = PYOS_TASK_STATE_READY
+		self.next_sched_task = (self.next_sched_task + 1) % len(self.task_list) if len(self.task_list) > 0 else 0 
+		# arrumar memoria respeitar os blocos
+		index_bloco_a_remover = task.paddr_offset / self.tamanho_blocos_memoria
+		self.blocos_memoria[index_bloco_a_remover] = 0
+		for i in range (task.paddr_offset, task.paddr_max):
+			self.memory.write(i, 0x0000)
 		self.sched(self.idle_task)
   
   
