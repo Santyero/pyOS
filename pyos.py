@@ -30,7 +30,6 @@ class os_t:
 		self.console_str = ""
 
 		self.task_list = [] # Lista de tarefas para execucao
-		self.blocked_tasks = [] # Tarefas em aguardo 
 		self.next_task_id = 0
 
 		self.memory_offset = 0  
@@ -118,7 +117,7 @@ class os_t:
 		if self.current_task is not None:
 			self.panic("current_task must be None when scheduling a new one (current_task=" + self.current_task.bin_name + ")")
 		if task.state != PYOS_TASK_STATE_READY:
-			self.panic("task "+ {task.bin_name} +"must be in READY state for being scheduled (state =" + str(task.state)+")")
+			self.panic("task "+ task.bin_name +" must be in READY state for being scheduled (state =" + str(task.state)+")")
 
 		for i in range(len(task.regs)):
 			self.cpu.set_reg(i, task.regs[i])  # Definir os registradores de proposito geral 
@@ -200,46 +199,42 @@ class os_t:
 		)
 
 	def add_task(self, cmd):
-		self.current_task = None
 		bin_name = cmd[4:]
 		self.printk(bin_name)
 		self.terminal.console_print("\radd binary " + bin_name + "\n")
 		task = self.load_task(bin_name)
-		self.printk(str(task))
-		if task is not None:
-			if self.task_list is not None:
-				self.task_list.append(task)
-				self.printk(str(self.task_list))
-			else:
-				self.task_list = [task]
-				self.printk(str(self.task_list))
-				self.run_task("run " + bin_name)
-		else:
+		if task is None:
 			self.terminal.console_print("error: binary " + bin_name + " not found\n")
- 
-	def run_task(self, cmd):
-		if (self.current_task is not None):
-			return self.terminal.console_print("error: binary " + self.current_task.bin_name + " is already running\n")
-		bin_name = cmd[4:]
-		self.terminal.console_print("\rrun binary " + bin_name + "\n")
-		task = self.load_task(bin_name)
-		if task is not None:
-			self.current_task = task
-			self.un_sched(self.idle_task)
-			self.sched(self.current_task)
-		else:
-			self.terminal.console_print("error: binary " + bin_name + " not found\n")
-
-	def terminate_unsched_task(self, task):
-		if task.state == PYOS_TASK_STATE_EXECUTING:
-			self.panic("impossible to terminate a task that is currently running")
-		if task == self.idle_task:
-			self.panic("impossible to terminate idle task")
-		if task is not self.current_task:
-			self.panic("task being terminated should be current_task")
-
+			return
 		self.current_task = None
-		self.printk("task "+task.bin_name+" terminated")
+		self.task_list.append(task)
+		self.printk("task "+task.bin_name+" added")
+		self.printk(str(self.task_list))
+		self.sched(task)
+ 
+	# def run_task(self, cmd):
+	# 	if (self.current_task is not None):
+	# 		return self.terminal.console_print("error: binary " + self.current_task.bin_name + " is already running\n")
+	# 	bin_name = cmd[4:]
+	# 	self.terminal.console_print("\rrun binary " + bin_name + "\n")
+	# 	task = self.load_task(bin_name)
+	# 	if task is not None:
+	# 		self.current_task = task
+	# 		self.un_sched(self.idle_task)
+	# 		self.sched(self.current_task)
+	# 	else:
+	# 		self.terminal.console_print("error: binary " + bin_name + " not found\n")
+
+	# def terminate_unsched_task(self, task):
+	# 	if task.state == PYOS_TASK_STATE_EXECUTING:
+	# 		self.panic("impossible to terminate a task that is currently running")
+	# 	if task == self.idle_task:
+	# 		self.panic("impossible to terminate idle task")
+	# 	if task != self.current_task:
+	# 		self.panic("task being terminated should be current_task. current_task: " + self.current_task.bin_name)
+
+	# 	self.current_task = None
+	# 	self.printk("task "+task.bin_name+" terminated")
 
 	def un_sched(self, task):
 		if not task in self.task_list:
@@ -272,14 +267,26 @@ class os_t:
 
 	def interrupt_timer (self):
 		if self.current_task is None:
-			self.printk("timer interrupt with no current task")
+			self.panic("timer interrupt with no current task")
 			return
-			# self.panic("timer interrupt with no current task")
+
+		self.escalonador()
+		
+  
+	def escalonador(self):
+		self.printk("timer interrupt current task: " + self.current_task.bin_name)
 		self.un_sched(self.current_task)
 		if len(self.task_list) > 0:	
-			self.sched(self.task_list[self.next_sched_task])
+			self.printk('scheduling next task')
+			self.current_task = None
+			task = self.task_list[self.next_sched_task]
+			task.state = PYOS_TASK_STATE_READY
+			self.sched(task)
 			self.next_sched_task = (self.next_sched_task + 1) % len(self.task_list)
-		self.printk("no has tasks to run")
+			return
+		self.current_task = None
+		self.idle_task.state = PYOS_TASK_STATE_READY
+		self.sched(self.idle_task)
 
 	def handle_interrupt(self, interrupt):
 		if interrupt == pycfg.INTERRUPT_MEMORY_PROTECTION_FAULT:
@@ -312,9 +319,14 @@ class os_t:
 		self.handle_gpf("invalid syscall " + str(service)) # Tratar syscall invalida
 
 	def close_process(self, task):
+		self.printk("closing process "+task.bin_name)
 		self.un_sched(task) # Desagendar a tarefa
-		self.terminate_unsched_task(task) # Terminar a tarefa
-		self.sched(self.idle_task) # Reiniciar as proximas tarefas
+		# self.terminate_unsched_task(task) # Terminar a tarefa
+		self.task_list.remove(task)
+		self.current_task = None
+		self.idle_task.state = PYOS_TASK_STATE_READY
+		self.sched(self.idle_task)
+  
   
 	def task_table_print(self):
 		self.terminal.console_print("task table:\n")
